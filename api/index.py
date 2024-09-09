@@ -12,18 +12,27 @@ CORS(app)  # Enable CORS for all routes
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 
-# Your iCal URL
-ICAL_URL = 'https://calendar.google.com/calendar/ical/romanvolkonidov%40gmail.com/private-1b2dd71a5440e4cd42c7c7d4d77fd554/basic.ics'
+# List of iCal URLs
+ICAL_URLS = [
+    'https://calendar.google.com/calendar/ical/romanvolkonidov%40gmail.com/private-1b2dd71a5440e4cd42c7c7d4d77fd554/basic.ics',
+    'https://calendar.google.com/calendar/ical/violetta6520%40gmail.com/private-4668f11232a35223fb2b7f0224414ac9/basic.ics',
+    'https://calendar.google.com/calendar/ical/p8simije0nhss305jf5qak5sm0%40group.calendar.google.com/private-8471e32b9a066146ba0545efc6d5322d/basic.ics',
+    'https://calendar.google.com/calendar/ical/o6bemnc7uc56hipv6t6lntccq4%40group.calendar.google.com/private-1f621ee25080da2111e7f1c5598322a9/basic.ics'
+]
 
 # Nairobi time zone
 NAIROBI_TZ = pytz.timezone('Africa/Nairobi')
 
-def fetch_ical_events(ical_url):
-    """Fetch and parse iCal events from the given URL"""
-    response = requests.get(ical_url)
-    response.raise_for_status()
-    calendar = Calendar.from_ical(response.content)
-    return [component for component in calendar.walk() if component.name == "VEVENT"]
+def fetch_ical_events(ical_urls):
+    """Fetch and parse iCal events from the given list of URLs"""
+    all_events = []
+    for url in ical_urls:
+        response = requests.get(url)
+        response.raise_for_status()
+        calendar = Calendar.from_ical(response.content)
+        events = [component for component in calendar.walk() if component.name == "VEVENT"]
+        all_events.extend(events)
+    return all_events
 
 def filter_today_events(events):
     """Filter events to include only today's events in Nairobi time zone"""
@@ -43,7 +52,7 @@ def filter_today_events(events):
 @app.route('/events', methods=['GET'])
 def get_events():
     try:
-        events = fetch_ical_events(ICAL_URL)
+        events = fetch_ical_events(ICAL_URLS)
         today_events = filter_today_events(events)
         logging.debug(f"Fetched today's events: {today_events}")
         return jsonify([{
