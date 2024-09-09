@@ -27,11 +27,17 @@ def fetch_ical_events(ical_urls):
     """Fetch and parse iCal events from the given list of URLs"""
     all_events = []
     for url in ical_urls:
-        response = requests.get(url)
-        response.raise_for_status()
-        calendar = Calendar.from_ical(response.content)
-        events = [component for component in calendar.walk() if component.name == "VEVENT"]
-        all_events.extend(events)
+        try:
+            response = requests.get(url)
+            response.raise_for_status()
+            calendar = Calendar.from_ical(response.content)
+            events = [component for component in calendar.walk() if component.name == "VEVENT"]
+            all_events.extend(events)
+            logging.debug(f"Fetched {len(events)} events from {url}")
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Error fetching events from {url}: {e}")
+        except Exception as e:
+            logging.error(f"Error parsing events from {url}: {e}")
     return all_events
 
 def filter_today_events(events):
