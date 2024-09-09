@@ -1,12 +1,11 @@
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify
 from flask_cors import CORS
-import datetime
+from datetime import datetime
 import logging
 import requests
-from icalendar import Calendar, Event
+from icalendar import Calendar
 import pytz
-import firebase_admin
-from firebase_admin import credentials, firestore
+from collections import defaultdict
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
@@ -14,77 +13,67 @@ CORS(app)  # Enable CORS for all routes
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
 
-# Your iCal URL
-ICAL_URL = 'https://calendar.google.com/calendar/ical/romanvolkonidov%40gmail.com/private-1b2dd71a5440e4cd42c7c7d4d77fd554/basic.ics'
+# Define the calendars to fetch events from
+CALENDARS = [
+    'https://calendar.google.com/calendar/ical/romanvolkonidov%40gmail.com/private-1b2dd71a5440e4cd42c7c7d4d77fd554/basic.ics',
+    'https://calendar.google.com/calendar/ical/violetta6520%40gmail.com/private-4668f11232a35223fb2b7f0224414ac9/basic.ics',
+    'https://calendar.google.com/calendar/ical/violetta6520%40gmail.com/public/basic.ics',
+    'https://calendar.google.com/calendar/ical/p8simije0nhss305jf5qak5sm0%40group.calendar.google.com/private-8471e32b9a066146ba0545efc6d5322d/basic.ics',
+    'https://calendar.google.com/calendar/ical/o6bemnc7uc56hipv6t6lntccq4%40group.calendar.google.com/private-1f621ee25080da2111e7f1c5598322a9/basic.ics'
+]
 
 # Nairobi time zone
 NAIROBI_TZ = pytz.timezone('Africa/Nairobi')
 
-# Initialize Firebase
-cred = credentials.Certificate('path/to/your/serviceAccountKey.json')
-firebase_admin.initialize_app(cred)
-db = firestore.client()
+# Function to fetch events from a single calendar
+def fetch_events_from_calendar(url):
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        calendar = Calendar.from_ical(response.text)
+        events = []
+        for component in calendar.walk():
+            if component.name == "VEVENT":
+                event = {
+                    'summary': str(component.get('summary')),
+                    'start': component.get('dtstart').dt.isoformat(),
+                    'end': component.get('dtend').dt.isoformat()
+                }
+                events.append(event)
+        return events
+    except requests.exceptions.RequestException as e:
+        logging.error(f"Error fetching events from {url}: {e}")
+        return []
 
-def fetch_ical_events(ical_url):
-    """Fetch and parse iCal events from the given URL"""
-    response = requests.get(ical_url)
-    response.raise_for_status()
-    calendar = Calendar.from_ical(response.content)
-    return [component for component in calendar.walk() if component.name == "VEVENT"]
-
-def filter_today_events(events):
-    """Filter events to include only today's events in Nairobi time zone"""
-    today = datetime.datetime.now(NAIROBI_TZ).date()
-    today_events = []
+# Function to filter events for today in Africa/Nairobi Time
+def filter_events_for_today(events):
+    today = datetime.now(NAIROBI_TZ).date()
+    filtered_events = []
     for event in events:
-        start = event.get('dtstart').dt
-        end = event.get('dtend').dt
-        if isinstance(start, datetime.datetime):
-            start = start.astimezone(NAIROBI_TZ).date()
-        if isinstance(end, datetime.datetime):
-            end = end.astimezone(NAIROBI_TZ).date()
-        if start <= today <= end:
-            today_events.append(event)
-    return today_events
+        event_start = datetime.fromisoformat(event['start']).astimezone(NAIROBI_TZ).date()
+        if event_start == today:
+            event['local_start'] = datetime.fromisoformat(event['start']).astimezone(NAIROBI_TZ).strftime('%Y-%m-%d %H:%M:%S')
+            event['local_end'] = datetime.fromisoformat(event['end']).astimezone(NAIROBI_TZ).strftime('%Y-%m-%d %H:%M:%S')
+            filtered_events.append(event)
+    return filtered_events
+
+# Function to group events by summary
+def group_events_by_summary(events):
+    grouped_events = defaultdict(list)
+    for event in events:
+        grouped_events[event['summary']].append(event)
+    return grouped_events
 
 @app.route('/events', methods=['GET'])
 def get_events():
-    try:
-        events = fetch_ical_events(ICAL_URL)
-        today_events = filter_today_events(events)
-        logging.debug(f"Fetched today's events: {today_events}")
-        return jsonify([{
-            'summary': str(event.get('summary')),
-            'start': event.get('dtstart').dt.astimezone(NAIROBI_TZ).isoformat() if isinstance(event.get('dtstart').dt, datetime.datetime) else event.get('dtstart').dt.isoformat(),
-            'end': event.get('dtend').dt.astimezone(NAIROBI_TZ).isoformat() if isinstance(event.get('dtend').dt, datetime.datetime) else event.get('dtend').dt.isoformat()
-        } for event in today_events])
-    except Exception as error:
-        logging.error(f"An error occurred: {error}")
-        return jsonify({"error": str(error)}), 500
-
-@app.route('/add_lesson', methods=['POST'])
-def add_lesson():
-    try:
-        data = request.json
-        student_name = data.get('student_name')
-        lesson_description = data.get('description')
-        lesson_date = data.get('date')
-        lesson_subject = data.get('subject')
-
-        # Add logic to create a lesson for the student in Firestore
-        lesson_data = {
-            'student_name': student_name,
-            'description': lesson_description,
-            'date': lesson_date,
-            'subject': lesson_subject
-        }
-        db.collection('lessons').add(lesson_data)
-        logging.debug(f"Added lesson for {student_name} with description {lesson_description} on {lesson_date} for subject {lesson_subject}")
-
-        return jsonify({"message": f"Lesson added for {student_name} with description {lesson_description} on {lesson_date} for subject {lesson_subject}"}), 200
-    except Exception as error:
-        logging.error(f"An error occurred while adding lesson: {error}")
-        return jsonify({"error": str(error)}), 500
+    all_events = []
+    for calendar_url in CALENDARS:
+        events = fetch_events_from_calendar(calendar_url)
+        all_events.extend(events)
+    
+    today_events = filter_events_for_today(all_events)
+    grouped_events = group_events_by_summary(today_events)
+    return jsonify(grouped_events)
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0', port=5000)
