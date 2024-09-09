@@ -2,12 +2,11 @@ from flask import Flask, jsonify
 from flask_cors import CORS
 from datetime import datetime
 import logging
-import requests
-from icalendar import Calendar
 import pytz
 from collections import defaultdict
 import asyncio
 import aiohttp
+from icalendar import Calendar
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
