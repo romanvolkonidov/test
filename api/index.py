@@ -6,6 +6,8 @@ import requests
 from icalendar import Calendar
 import pytz
 from collections import defaultdict
+import asyncio
+import aiohttp
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
@@ -25,23 +27,23 @@ CALENDARS = [
 # Nairobi time zone
 NAIROBI_TZ = pytz.timezone('Africa/Nairobi')
 
-# Function to fetch events from a single calendar
-def fetch_events_from_calendar(url):
+# Function to fetch events from a single calendar asynchronously
+async def fetch_events_from_calendar(session, url):
     try:
-        response = requests.get(url)
-        response.raise_for_status()
-        calendar = Calendar.from_ical(response.text)
-        events = []
-        for component in calendar.walk():
-            if component.name == "VEVENT":
-                event = {
-                    'summary': str(component.get('summary')),
-                    'start': component.get('dtstart').dt.isoformat(),
-                    'end': component.get('dtend').dt.isoformat()
-                }
-                events.append(event)
-        return events
-    except requests.exceptions.RequestException as e:
+        async with session.get(url) as response:
+            response.raise_for_status()
+            calendar = Calendar.from_ical(await response.text())
+            events = []
+            for component in calendar.walk():
+                if component.name == "VEVENT":
+                    event = {
+                        'summary': str(component.get('summary')),
+                        'start': component.get('dtstart').dt.isoformat(),
+                        'end': component.get('dtend').dt.isoformat()
+                    }
+                    events.append(event)
+            return events
+    except Exception as e:
         logging.error(f"Error fetching events from {url}: {e}")
         return []
 
@@ -65,11 +67,11 @@ def group_events_by_summary(events):
     return grouped_events
 
 @app.route('/events', methods=['GET'])
-def get_events():
-    all_events = []
-    for calendar_url in CALENDARS:
-        events = fetch_events_from_calendar(calendar_url)
-        all_events.extend(events)
+async def get_events():
+    async with aiohttp.ClientSession() as session:
+        tasks = [fetch_events_from_calendar(session, url) for url in CALENDARS]
+        all_events = await asyncio.gather(*tasks)
+        all_events = [event for sublist in all_events for event in sublist]  # Flatten the list
     
     today_events = filter_events_for_today(all_events)
     grouped_events = group_events_by_summary(today_events)
