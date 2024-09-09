@@ -5,6 +5,8 @@ import logging
 import requests
 from icalendar import Calendar, Event
 import pytz
+import firebase_admin
+from firebase_admin import credentials, firestore
 
 app = Flask(__name__)
 CORS(app)  # Enable CORS for all routes
@@ -17,6 +19,11 @@ ICAL_URL = 'https://calendar.google.com/calendar/ical/romanvolkonidov%40gmail.co
 
 # Nairobi time zone
 NAIROBI_TZ = pytz.timezone('Africa/Nairobi')
+
+# Initialize Firebase
+cred = credentials.Certificate('path/to/your/serviceAccountKey.json')
+firebase_admin.initialize_app(cred)
+db = firestore.client()
 
 def fetch_ical_events(ical_url):
     """Fetch and parse iCal events from the given URL"""
@@ -63,9 +70,17 @@ def add_lesson():
         lesson_description = data.get('description')
         lesson_date = data.get('date')
         lesson_subject = data.get('subject')
-        # Add logic to create a lesson for the student
-        logging.debug(f"Adding lesson for {student_name} with description {lesson_description} on {lesson_date} for subject {lesson_subject}")
-        # For now, just return a success message
+
+        # Add logic to create a lesson for the student in Firestore
+        lesson_data = {
+            'student_name': student_name,
+            'description': lesson_description,
+            'date': lesson_date,
+            'subject': lesson_subject
+        }
+        db.collection('lessons').add(lesson_data)
+        logging.debug(f"Added lesson for {student_name} with description {lesson_description} on {lesson_date} for subject {lesson_subject}")
+
         return jsonify({"message": f"Lesson added for {student_name} with description {lesson_description} on {lesson_date} for subject {lesson_subject}"}), 200
     except Exception as error:
         logging.error(f"An error occurred while adding lesson: {error}")
