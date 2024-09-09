@@ -15,4 +15,4 @@ urllib3==2.2.2
 flask-cors==5.0.0
 icalendar==5.0.13
 requests==2.32.3
-gunicorn
+gunicorn==20.1.0
