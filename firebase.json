@@ -1,6 +1,6 @@
 {
   "hosting": {
-    "public": "build",  // Change this to your build directory
+    "public": "api",  // Change this to your build directory
     "rewrites": [
       
       {
