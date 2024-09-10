@@ -2,10 +2,7 @@
   "hosting": {
     "public": "build",  // Change this to your build directory
     "rewrites": [
-      {
-        "source": "/api/**",
-        "function": "yourFunction" // If using Cloud Functions
-      },
+    
       {
         "source": "/events",
         "destination": "/index.html" // Or your main entry point if using a single-page app
