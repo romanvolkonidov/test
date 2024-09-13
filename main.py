@@ -74,6 +74,7 @@ async def get_events():
         tasks = [fetch_events_from_calendar(session, url) for url in CALENDARS]
         all_events = await asyncio.gather(*tasks)
         all_events = [event for sublist in all_events for event in sublist]  # Flatten the list
+        logging.debug(f"Total events fetched: {len(all_events)}")
     
     today_events = filter_events_for_today(all_events)
     grouped_events = group_events_by_summary(today_events)
