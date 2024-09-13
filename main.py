@@ -41,6 +41,7 @@ async def fetch_events_from_calendar(session, url):
                         'end': component.get('dtend').dt.isoformat()
                     }
                     events.append(event)
+            logging.debug(f"Fetched {len(events)} events from {url}")
             return events
     except Exception as e:
         logging.error(f"Error fetching events from {url}: {e}")
@@ -56,6 +57,7 @@ def filter_events_for_today(events):
             event['local_start'] = datetime.fromisoformat(event['start']).astimezone(NAIROBI_TZ).strftime('%Y-%m-%d %H:%M:%S')
             event['local_end'] = datetime.fromisoformat(event['end']).astimezone(NAIROBI_TZ).strftime('%Y-%m-%d %H:%M:%S')
             filtered_events.append(event)
+    logging.debug(f"Filtered {len(filtered_events)} events for today")
     return filtered_events
 
 # Function to group events by summary
@@ -63,6 +65,7 @@ def group_events_by_summary(events):
     grouped_events = defaultdict(list)
     for event in events:
         grouped_events[event['summary']].append(event)
+    logging.debug(f"Grouped events by summary: {dict(grouped_events)}")
     return grouped_events
 
 @app.route('/events', methods=['GET'])
